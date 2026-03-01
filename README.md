@@ -255,3 +255,19 @@ MIT
 ---
 
 *Built by Saku Worker Team 🐾*
+
+### ❌ Docker Socket エラー（dashboard-api が起動しない）
+
+```bash
+# エラー例: connect ENOENT /var/run/docker.sock
+
+# Mac Docker Desktop の Socket パス確認
+ls -la /var/run/docker.sock
+# または
+ls -la ~/.docker/run/docker.sock
+
+# docker-compose.yml の volumes を修正
+#   /var/run/docker.sock:/var/run/docker.sock
+# → 上記でうまくいかない場合:
+#   ${HOME}/.docker/run/docker.sock:/var/run/docker.sock
+```
