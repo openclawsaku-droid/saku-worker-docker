@@ -1,6 +1,32 @@
 version: '3.8'
 
+networks:
+  saku-worker-net:
+    driver: bridge
+
+volumes:
+  router-data:
+
 services:
+  # ===== router: LLM ルーター =====
+  router:
+    image: node:22-slim
+    container_name: saku-router
+    working_dir: /app
+    command: sh -c "npm install -g openclaw-router 2>/dev/null || true && npx openclaw-router --port 8080 --bind 0.0.0.0 || node -e \"require('http').createServer((r,s)=>{s.end(JSON.stringify({ok:true}))}).listen(8080,()=>console.log('mock router :8080'))\""
+    ports:
+      - "8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - router-data:/root/.openclaw-router
+    restart: unless-stopped
+    networks:
+      - saku-worker-net
+
+  # ===== pu-chan: エージェント1 =====
   pu-chan:
     build: .
     container_name: pu-chan
@@ -14,14 +40,20 @@ services:
       - DISCORD_TOKEN=${PU_CHAN_DISCORD_TOKEN}
       - OPENCLAW_PORT=8001
       - AGENT_NAME=pu-chan
+      - OPENCLAW_ROUTER_URL=http://router:8080/v1
+    depends_on:
+      - router
     restart: unless-stopped
+    networks:
+      - saku-worker-net
     healthcheck:
-      test: ["CMD", "openclaw", "gateway", "health", "--token", "${OPENCLAW_GATEWAY_TOKEN:-}"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
+  # ===== pino: エージェント2 =====
   pino:
     build: .
     container_name: pino
@@ -35,10 +67,46 @@ services:
       - DISCORD_TOKEN=${PINO_DISCORD_TOKEN}
       - OPENCLAW_PORT=8002
       - AGENT_NAME=pino
+      - OPENCLAW_ROUTER_URL=http://router:8080/v1
+    depends_on:
+      - router
     restart: unless-stopped
+    networks:
+      - saku-worker-net
     healthcheck:
-      test: ["CMD", "openclaw", "gateway", "health", "--token", "${OPENCLAW_GATEWAY_TOKEN:-}"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+
+  # ===== dashboard-api: 管理API =====
+  dashboard-api:
+    build: ./dashboard/server
+    container_name: saku-dashboard-api
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./shared:/shared
+      - ./.env:/app/.env.host:ro
+    environment:
+      - PORT=9000
+      - ROUTER_INTERNAL_URL=http://router:8080
+    restart: unless-stopped
+    networks:
+      - saku-worker-net
+
+  # ===== dashboard-ui: Web管理画面 =====
+  dashboard-ui:
+    build: ./dashboard/ui
+    container_name: saku-dashboard-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:9000
+    depends_on:
+      - dashboard-api
+    restart: unless-stopped
+    networks:
+      - saku-worker-net

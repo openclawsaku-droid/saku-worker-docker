@@ -1,0 +1,15 @@
+{
+  "name": "saku-dashboard-api",
+  "version": "1.0.0",
+  "description": "Saku Worker Dashboard API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.2"
+  }
+}
