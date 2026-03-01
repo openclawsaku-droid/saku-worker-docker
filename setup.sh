@@ -15,6 +15,14 @@ if ! docker compose version &>/dev/null 2>&1 && ! command -v docker-compose &>/d
     exit 1
 fi
 echo "✅ Docker: $(docker --version)"
+
+# Docker デーモン接続確認
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker Desktop が起動していません"
+    echo "→ Docker Desktop を起動してから再実行してください"
+    exit 1
+fi
+echo "✅ Docker Desktop: 接続OK"
 echo ""
 
 # .env ファイル生成
@@ -92,8 +100,34 @@ mkdir -p defaults pu-chan pino shared/logs shared/config
 
 echo ""
 echo "--- ビルド & 起動 ---"
-docker compose build
-docker compose up -d
+echo ""
+echo "--- ビルド ---"
+if ! docker compose build; then
+    echo "❌ ビルドに失敗しました"
+    echo "→ Dockerfile やネットワーク接続を確認してください"
+    exit 1
+fi
+echo ""
+echo "--- 起動 ---"
+if ! docker compose up -d; then
+    echo "❌ コンテナの起動に失敗しました"
+    echo "→ ログ確認: docker compose logs"
+    exit 1
+fi
+
+# 起動確認
+echo ""
+echo "⏳ コンテナ起動を確認中..."
+sleep 5
+RUNNING=$(docker compose ps --status running -q 2>/dev/null | wc -l | tr -d " ")
+TOTAL=$(docker compose ps -q 2>/dev/null | wc -l | tr -d " ")
+if [ "$RUNNING" -lt "$TOTAL" ]; then
+    echo "⚠️  一部のコンテナが起動に失敗しています ($RUNNING/$TOTAL)"
+    echo "→ 詳細: docker compose ps"
+    echo "→ ログ: docker compose logs"
+else
+    echo "✅ 全 $TOTAL コンテナ起動成功"
+fi
 
 echo ""
 echo "=== ✅ セットアップ完了 ==="
